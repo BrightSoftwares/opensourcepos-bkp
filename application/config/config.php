@@ -8,7 +8,7 @@
 | 
 | 
 */ 
-$config['application_version'] = '3.3.2';
+$config['application_version'] = '3.3.1';
 
 /* 
 |-------------------------------------------------------------------------- 
@@ -19,7 +19,7 @@ $config['application_version'] = '3.3.2';
 | 
 | 
 */ 
-$config['commit_sha1'] = 'dev';
+$config['commit_sha1'] = 'c786d4';
  
 /* 
 |-------------------------------------------------------------------------- 
@@ -66,7 +66,7 @@ $config['db_log_enabled'] = FALSE;
 |
 */
 $config['base_url'] = ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') || (isset($_ENV['FORCE_HTTPS']) && $_ENV['FORCE_HTTPS'] == 'true')) ? 'https' : 'http';
-$config['base_url'] .= '://' . ((isset($_SERVER['HTTP_HOST'])) ? $_SERVER['HTTP_HOST'] : 'localhost') ;
+$config['base_url'] .= '://' . $_SERVER['HTTP_HOST'];
 $config['base_url'] .= str_replace(basename($_SERVER['SCRIPT_NAME']), '', $_SERVER['SCRIPT_NAME']);
 
 /*

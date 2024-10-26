@@ -73,7 +73,6 @@
 									'name'=>'discount',
 									'id'=>'discount',
 									'class'=>'form-control input-sm',
-									'onClick'=>'this.select();',
 									'value'=>$person_info->discount)
 									); ?>
 						</div>

@@ -63,7 +63,6 @@ if(isset($error))
 				show_report_if_allowed('specific', 'customer', $person_id, 'reports_customers');
 				show_report_if_allowed('specific', 'discount', $person_id, 'reports_discounts');
 				show_report_if_allowed('specific', 'employee', $person_id, 'reports_employees');
-				show_report_if_allowed('specific', 'supplier', $person_id, 'reports_suppliers');
 				?>
 			 </div>
 		</div>

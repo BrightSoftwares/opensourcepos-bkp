@@ -423,11 +423,12 @@ class Sales extends Secure_Controller
 				$discount_type = $item_kit_info->kit_discount_type;
 			}
 
+			$price = NULL;
 			$print_option = PRINT_ALL; // Always include in list of items on invoice
 
 			if(!empty($kit_item_id))
 			{
-				if(!$this->sale_lib->add_item($kit_item_id, $quantity, $item_location, $discount, $discount_type))
+				if(!$this->sale_lib->add_item($kit_item_id, $quantity, $item_location, $discount, $discount_type, PRICE_MODE_STANDARD))
 				{
 					$data['error'] = $this->lang->line('sales_unable_to_add_item');
 				}
@@ -450,7 +451,7 @@ class Sales extends Secure_Controller
 		}
 		else
 		{
-			if(!$this->sale_lib->add_item($item_id_or_number_or_item_kit_or_receipt, $quantity, $item_location, $discount, $discount_type))
+			if(!$this->sale_lib->add_item($item_id_or_number_or_item_kit_or_receipt, $quantity, $item_location, $discount, $discount_type, PRICE_MODE_STANDARD))
 			{
 				$data['error'] = $this->lang->line('sales_unable_to_add_item');
 			}
@@ -473,7 +474,7 @@ class Sales extends Secure_Controller
 		$description = $this->input->post('description');
 		$serialnumber = $this->input->post('serialnumber');
 		$price = parse_decimals($this->input->post('price'));
-		$quantity = parse_quantity($this->input->post('quantity'));
+		$quantity = parse_decimals($this->input->post('quantity'));
 		$discount = parse_decimals($this->input->post('discount'));
 		$discount_type = $this->input->post('discount_type');
 
@@ -1111,7 +1112,6 @@ class Sales extends Secure_Controller
 		}
 
 		$data['items_module_allowed'] = $this->Employee->has_grant('items', $this->Employee->get_logged_in_employee_info()->person_id);
-		$data['change_price'] = $this->Employee->has_grant('sales_change_price', $this->Employee->get_logged_in_employee_info()->person_id);
 
 		$invoice_format = $this->config->item('sales_invoice_format');
 		$data['invoice_format'] = $invoice_format;
@@ -1178,12 +1178,20 @@ class Sales extends Secure_Controller
 	{
 		$data = array();
 
+		$data['employees'] = array();
+		foreach($this->Employee->get_all()->result() as $employee)
+		{
+			foreach(get_object_vars($employee) as $property => $value)
+			{
+				$employee->$property = $this->xss_clean($value);
+			}
+
+			$data['employees'][$employee->person_id] = $employee->first_name . ' ' . $employee->last_name;
+		}
+
 		$sale_info = $this->xss_clean($this->Sale->get_info($sale_id)->row_array());
-		$data['selected_customer_id'] = $sale_info['customer_id'];
 		$data['selected_customer_name'] = $sale_info['customer_name'];
-		$employee_info = $this->Employee->get_info($sale_info['employee_id']);
-		$data['selected_employee_id'] = $sale_info['employee_id'];
-		$data['selected_employee_name'] = $this->xss_clean($employee_info->first_name . ' ' . $employee_info->last_name);
+		$data['selected_customer_id'] = $sale_info['customer_id'];
 		$data['sale_info'] = $sale_info;
 		$balance_due = $sale_info['amount_due'] - $sale_info['amount_tendered'];
 		if($balance_due < 0)
@@ -1207,12 +1215,12 @@ class Sales extends Secure_Controller
 		$data['balance_due'] = $balance_due != 0;
 
 		// don't allow gift card to be a payment option in a sale transaction edit because it's a complex change
-		$new_payment_options = $this->xss_clean($this->Sale->get_payment_options(FALSE));
-		$data['payment_options'] = $new_payment_options;
+		$data['payment_options'] = $this->xss_clean($this->Sale->get_payment_options(FALSE));
 
 		// Set up a slightly modified list of payment types for new payment entry
+		$new_payment_options = $this->Sale->get_payment_options(FALSE);
 		$new_payment_options["--"] = $this->lang->line('common_none_selected_text');
-		$data['new_payment_options'] = $new_payment_options;
+		$data['new_payment_options'] = $this->xss_clean($new_payment_options);
 
 		$this->load->view('sales/form', $data);
 	}
@@ -1282,7 +1290,7 @@ class Sales extends Secure_Controller
 		$sale_data = array(
 			'sale_time' => $date_formatter->format('Y-m-d H:i:s'),
 			'customer_id' => $this->input->post('customer_id') != '' ? $this->input->post('customer_id') : NULL,
-			'employee_id' => $this->input->post('employee_id') != '' ? $this->input->post('employee_id') : NULL,
+			'employee_id' => $this->input->post('employee_id'),
 			'comment' => $this->input->post('comment'),
 			'invoice_number' => $this->input->post('invoice_number') != '' ? $this->input->post('invoice_number') : NULL
 		);
@@ -1293,27 +1301,12 @@ class Sales extends Secure_Controller
 		for($i = 0; $i < $number_of_payments; ++$i)
 		{
 			$payment_id = $this->input->post('payment_id_' . $i);
-			$payment_type = $this->input->post('payment_type_' . $i);
 			$payment_amount = $this->input->post('payment_amount_' . $i);
-			$refund_type = $this->input->post('refund_type_' . $i);
-			$cash_refund = $this->input->post('refund_amount_' . $i);
+			$payment_type = $this->input->post('payment_type_' . $i);
+			$cash_refund = 0.00;
 
-			// if the refund is not cash ...
-			if(empty(strstr($refund_type, $this->lang->line('sales_cash'))))
-			{
-				// ... and it's positive ...
-				if($cash_refund > 0)
-				{
-					// ... change it to be a new negative payment (a "non-cash refund")
-					$payment_type = $refund_type;
-					$payment_amount = $payment_amount - $cash_refund;
-					$cash_refund = 0.00;
-				}
-			}
-
-			// To maintain tradition we will also delete any payments with 0 amount
-			// assuming these are mistakes introduced at sale time.
-			// This is now done in models/Sale.php
+			// To maintain tradition we will also delete any payments with 0 amount assuming these are mistakes
+			// introduced at sale time.  This is now done in Sale.php
 
 			$payments[] = array('payment_id' => $payment_id, 'payment_type' => $payment_type, 'payment_amount' => $payment_amount, 'cash_refund' => $cash_refund, 'employee_id' => $employee_id);
 		}
@@ -1426,13 +1419,14 @@ class Sales extends Secure_Controller
 	 */
 	public function suspended()
 	{
-		$data = array();
 		$customer_id = $this->sale_lib->get_customer();
+		$data = array();
 		$data['suspended_sales'] = $this->xss_clean($this->Sale->get_all_suspended($customer_id));
+		$data['dinner_table_enable'] = $this->config->item('dinner_table_enable');
 		$this->load->view('sales/suspended', $data);
 	}
 
-	/**
+	/*
 	 * Unsuspended sales are now left in the tables and are only removed
 	 * when they are intentionally cancelled.
 	 */

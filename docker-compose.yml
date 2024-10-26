@@ -1,4 +1,4 @@
-version: '3.4'
+version: '2'
 
 volumes:
     uploads:
@@ -11,10 +11,15 @@ networks:
     db_net:
 
 services:
+    sqlscript:
+        build:
+            context: database/
+            dockerfile: Dockerfile
+
     ospos:
         build:
             context: .
-            target: ospos
+            dockerfile: Dockerfile
         container_name: ospos
         restart: always
         depends_on:
@@ -44,8 +49,8 @@ services:
           - "3306"
         networks:
           - db_net
-        volumes:
-          - ./database/database.sql:/docker-entrypoint-initdb.d/database.sql
+        volumes_from:
+          - sqlscript
         environment:
           - MYSQL_ROOT_PASSWORD=${OSPOS_MYSQL_ROOT_PASSWORD}
           - MYSQL_DATABASE=ospos
